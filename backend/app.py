@@ -4,8 +4,10 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import hashlib
 import mysql.connector
+from pathlib import Path
+load_dotenv(Path(__file__).with_name(".env"))
 
-load_dotenv()
+print("DB_PASSWORD from env:", os.getenv("DB_PASSWORD"))
 app = Flask(__name__)
 CORS(app)
 

@@ -1,0 +1,20 @@
+CREATE DATABASE IF NOT EXISTS log_integrity_db;
+
+USE log_integrity_db;
+
+DROP TABLE IF EXISTS logs;
+
+CREATE TABLE logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    log_message TEXT NOT NULL,
+    hash_value VARCHAR(255) NOT NULL,
+    previous_hash VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) DEFAULT 'valid'
+);
+
+
+//demo------------
+UPDATE logs
+SET log_message = "HACKED DATA"
+WHERE id = 1;
