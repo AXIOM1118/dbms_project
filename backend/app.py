@@ -1,8 +1,11 @@
+import os
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import hashlib
 import mysql.connector
 
+load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
@@ -10,7 +13,7 @@ def get_db_connection():
     return mysql.connector.connect(
         host="localhost",
         user="root",
-        password="",
+        password=os.getenv("DB_PASSWORD")
         database="log_integrity_db"
     )
 
