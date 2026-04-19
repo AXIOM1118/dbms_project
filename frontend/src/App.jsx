@@ -437,11 +437,14 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
 
   const [logs, setLogs] = useState([]);
+  const [alerts, setAlerts] = useState([]); // ✅ add this
+
   const [stats, setStats] = useState({
     totalLogs: 0,
     totalAlerts: 0,
     systemHealth: 0,
   });
+
   const [lastScan, setLastScan] = useState("");
   const [verdict, setVerdict] = useState("safe");
 
@@ -455,26 +458,37 @@ export default function App() {
   const loadDashboard = async () => {
     try {
       const data = await fetchJSON(`${API_BASE}/logs`);
+      const alertsData = await fetchJSON(`${API_BASE}/alerts`); // ✅ fetch here
 
-      const mappedLogs = data.map((log) => ({
-        _id: log.id,
-        label: log.log_message,
-        status: log.status,
-        safe: log.status === "valid",
-        hash_value: log.hash_value,
-        previous_hash: log.previous_hash,
-        created_at: log.created_at,
-        time: log.created_at
-          ? new Date(log.created_at).toLocaleTimeString()
+      const logsArray = Array.isArray(data) ? data : data.logs || [];
+      const alertsArray = Array.isArray(alertsData)
+        ? alertsData
+        : alertsData.alerts || [];
+
+      const tamperedIds = alertsArray.map((a) => a.log_id);
+
+      const mappedLogs = logsArray.map((log) => ({
+        _id: log.log_id,
+        label: log.action,
+        status: tamperedIds.includes(log.log_id) ? "tampered" : "valid",
+        safe: !tamperedIds.includes(log.log_id),
+        hash_value: log.current_hash,
+        previous_hash: log.prev_hash,
+        created_at: log.timestamp,
+        time: log.timestamp
+          ? new Date(log.timestamp).toLocaleTimeString()
           : "No time",
       }));
 
       setLogs(mappedLogs);
+      setAlerts(alertsArray); // ✅ save alerts in state
 
       const totalLogs = mappedLogs.length;
-      const totalAlerts = mappedLogs.filter((l) => !l.safe).length;
+      const totalAlerts = alertsArray.length;
       const systemHealth =
-        totalLogs === 0 ? 100 : Math.round(((totalLogs - totalAlerts) / totalLogs) * 100);
+        totalLogs === 0
+          ? 100
+          : Math.round(((totalLogs - totalAlerts) / totalLogs) * 100);
 
       setStats({
         totalLogs,
@@ -482,8 +496,8 @@ export default function App() {
         systemHealth,
       });
 
+      setVerdict(totalAlerts > 0 ? "warning" : "safe");
       setLastScan(new Date().toLocaleString());
-      setVerdict(totalAlerts === 0 ? "safe" : "unsafe");
     } catch (error) {
       console.error("Dashboard load error:", error);
       alert("Failed to load dashboard");
@@ -498,6 +512,8 @@ export default function App() {
         setLoading(false);
       }
     };
+
+    
 
     init();
   }, []);
@@ -533,50 +549,28 @@ export default function App() {
   const VerdictIcon = verdictData.icon;
 
   const handleVerify = async () => {
-    try {
-      setVerifying(true);
+  try {
+    setVerifying(true);
 
-      const verifiedLogs = await Promise.all(
-        logs.map(async (log) => {
-          try {
-            const res = await fetchJSON(`${API_BASE}/verify-log/${log._id}`);
-            return {
-              ...log,
-              safe: res.status === "valid",
-              status: res.status,
-            };
-          } catch (error) {
-            console.error(`Verification failed for log ${log._id}:`, error);
-            return {
-              ...log,
-              safe: false,
-              status: "tampered",
-            };
-          }
-        })
-      );
+    const res = await fetchJSON(`${API_BASE}/verify`, {
+      method: "POST",
+    });
 
-      setLogs(verifiedLogs);
-
-      const totalLogs = verifiedLogs.length;
-      const totalAlerts = verifiedLogs.filter((l) => !l.safe).length;
-      const systemHealth =
-        totalLogs === 0 ? 100 : Math.round(((totalLogs - totalAlerts) / totalLogs) * 100);
-
-      setStats({
-        totalLogs,
-        totalAlerts,
-        systemHealth,
-      });
-
-      setLastScan(new Date().toLocaleString());
-      setVerdict(totalAlerts === 0 ? "safe" : "unsafe");
-    } catch (error) {
-      console.error("Verify error:", error);
-      alert("Verification failed");
-    } finally {
-      setVerifying(false);
+    if (res.status === "All logs are valid") {
+      setVerdict("safe");
+    } else {
+      setVerdict("unsafe");
     }
+
+    await loadDashboard(); // reload logs
+
+    setLastScan(new Date().toLocaleString());
+  } catch (error) {
+    console.error(error);
+    alert("Verification failed");
+  } finally {
+    setVerifying(false);
+  }
   };
 
   const handleAddOrUpdate = async () => {
@@ -592,18 +586,22 @@ export default function App() {
         await fetchJSON(`${API_BASE}/logs/${editingId}`, {
           method: "PUT",
           body: JSON.stringify({
-            logMessage: form.label,
-          }),
+  user_id: "user1",
+  action: form.label,
+  data: form.status
+}),
         });
 
         alert("Log updated successfully");
       } else {
-        await fetchJSON(`${API_BASE}/add-log`, {
-          method: "POST",
-          body: JSON.stringify({
-            logMessage: form.label,
-          }),
-        });
+        await fetchJSON(`${API_BASE}/add_log`, {
+  method: "POST",
+  body: JSON.stringify({
+    user_id: "user1",
+    action: form.label,
+    data: form.status,
+  }),
+});
 
         alert("Log added successfully");
       }
@@ -611,8 +609,7 @@ export default function App() {
       setForm({
         label: "",
         status: "",
-        safe: true,
-      });
+       safe:true,      });
       setEditingId(null);
 
       await loadDashboard();
